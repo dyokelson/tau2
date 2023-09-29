@@ -59,6 +59,7 @@ static soma::Client *client;
 static soma::CollectorHandle soma_collector;
 static soma::NamespaceHandle *ns_handle;
 int server_instance_id = 0;
+static std::vector<thallium::async_response> requests;
 
 #define RESERVE(container, size) container.reserve(size)
 #define UPDATE_KEY(container, val) container.push_back(val)
@@ -320,7 +321,10 @@ void Tau_plugin_mochi_write_variables() {
     RtsLayer::UnLockDB();
 
     /* commit the SOMA namespace */
-    soma_collector.soma_commit_namespace(ns_handle);
+    auto req = soma_collector.soma_commit_namespace_async(ns_handle);
+    if (req) {
+    	requests.push_back(std::move(req));
+    }
 }
 
 int Tau_plugin_mochi_dump(Tau_plugin_event_dump_data_t* data) {
@@ -362,6 +366,9 @@ int Tau_plugin_mochi_pre_end_of_execution(Tau_plugin_event_pre_end_of_execution_
     dummy.tid = 0;
     /* write final data */
     Tau_plugin_mochi_dump(&dummy);
+    for(auto i = requests.begin(); i != requests.end(); i++) {
+        i->wait();
+    }
     if (opened) {
         /* close mochi if it has to close before MPI_Finalize */
         opened = false;
