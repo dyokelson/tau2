@@ -1188,7 +1188,7 @@ bool validate_thread() {
     return true;
 }
 #else
-bool validate_thread() {} // do nothing
+bool validate_thread() {return false;} // do nothing
 #endif
 
 //////////////////////////////////////////////////////////////////////
@@ -1234,7 +1234,7 @@ void Tau_cupti_buffer_processed(void) {
 extern void Tau_roctracer_flush_tracing(void);
 #endif /* TAU_ENABLE_ROCTRACER */
 
-#ifdef TAU_ENABLE_ROCPROFILER
+#if defined(TAU_ENABLE_ROCPROFILER) || defined(TAU_ENABLE_ROCPROFILERV2)
 extern void Tau_rocprofiler_pool_flush(void);
 #endif
 #ifdef TAU_USE_OMPT_5_0
@@ -1267,7 +1267,7 @@ extern "C" void Tau_flush_gpu_activity(void) {
         }
     }
 #endif
-#ifdef TAU_ENABLE_ROCPROFILER
+#if defined(TAU_ENABLE_ROCPROFILER) || defined(TAU_ENABLE_ROCPROFILERV2)
    Tau_rocprofiler_pool_flush();
 #endif
 #ifdef TAU_ENABLE_ROCTRACER
@@ -1615,6 +1615,7 @@ extern "C" void Tau_disable_instrumentation(void) {
 
 ///////////////////////////////////////////////////////////////////////////
 extern "C" void Tau_shutdown(void) {
+  TAU_VERBOSE("Tau_shutdown!\n");
   Tau_memory_wrapper_disable();
   if (!TheUsingCompInst()) {
     RtsLayer::TheShutdown() = true;
@@ -2379,6 +2380,11 @@ extern "C" void Tau_create_top_level_timer_if_necessary_task(int tid)
 extern void Tau_roctracer_start_tracing(void);
 extern void Tau_roctracer_stop_tracing(void);
 #endif /* TAU_ENABLE_ROCTRACER */
+#ifdef TAU_ENABLE_ROCPROFILERV2
+extern void Tau_rocprofv2_stop(void);
+#endif /* TAU_ENABLE_ROCPROFILERV2 */
+
+
 
 extern "C" void Tau_create_top_level_timer_if_necessary(void) {
   if ((RtsLayer::myNode() == -1) && (Tau_get_thread() != 0)) {
@@ -2421,6 +2427,10 @@ extern "C" void Tau_stop_top_level_timer_if_necessary(void) {
 #ifdef TAU_ENABLE_ROCTRACER
    Tau_roctracer_stop_tracing();
 #endif /* TAU_ENABLE_ROCTRACER */
+#ifdef TAU_ENABLE_ROCPROFILERV2
+     Tau_rocprofv2_stop();
+#endif /* TAU_ENABLE_ROCPROFILERV2 */
+
    done = true;
 }
 

@@ -544,6 +544,16 @@ case $1 in
 	echo "s,^DWARFLIB=.*$,DWARFLIB=$dwarflib,g" >> $sedout
 	;;
 
+     elfdir=*)
+        elfdir=`echo $1 | sed -e 's/^elfdir=//'  -e 's/#/ /g'`
+	echo "s,^ELFDIR=.*$,ELFDIR=$elfdir,g" >> $sedout
+	;;
+
+     tbbdir=*)
+        tbbdir=`echo $1 | sed -e 's/^tbbdir=//'  -e 's/#/ /g'`
+	echo "s,^TBBDIR=.*$,TBBDIR=$tbbdir,g" >> $sedout
+	;;
+
      jdkdir=*)
         jdkdir=`echo $1 | sed -e 's/^jdkdir=//'`
 	echo "s,^JDKDIR=.*$,JDKDIR=$jdkdir,g" >> $sedout
@@ -711,6 +721,10 @@ case $1 in
         ;;
      TAU_BFD)
         echo NOTE: Using BFD support
+        echo "s/#$1#\(.*\)/$bs\1#$1#/g" >> $sedout
+        ;;
+     ELF)
+        echo NOTE: Using ELF support
         echo "s/#$1#\(.*\)/$bs\1#$1#/g" >> $sedout
         ;;
      TAU_ELF_BFD)
@@ -1082,6 +1096,11 @@ case $1 in
         roctracerlibdir=`echo $1 | sed -e 's/^roctracerlibdir=//' -e 's/#/ /g'`
 	echo "s@^TAU_ROCTRACER_LIB_DIR=\(.*\)@TAU_ROCTRACER_LIB_DIR=$roctracerlibdir@g" >> $sedout
         ;;
+     rocmsmidir=*)
+       rocmsmidir=`echo $1 | sed -e 's/^rocmsmidir=//' -e 's/#/ /g'`
+        echo "s@^TAU_ROCM_SMI_DIR=\(.*\)@TAU_ROCM_SMI_DIR=$rocmsmidir@g" >> $sedout
+        ;;
+
      hipdir=*)
         hipdir=`echo $1 | sed -e 's/^hipdir=//' -e 's/#/ /g'`
 	echo "s@^TAU_HIP=\(.*\)@TAU_HIP=$hipdir@g" >> $sedout
@@ -1121,6 +1140,10 @@ case $1 in
         echo "s/#$1#\(.*\)/$bs\1#$1#/g" >> $sedout
         ;;
      ROCPROFILER)
+        echo "NOTE: Using the TAU's ROCm ROCPROFILER Interface "
+        echo "s/#$1#\(.*\)/$bs\1#$1#/g" >> $sedout
+        ;;
+     ROCPROFILERV2)
         echo "NOTE: Using the TAU's ROCm ROCPROFILER Interface "
         echo "s/#$1#\(.*\)/$bs\1#$1#/g" >> $sedout
         ;;
@@ -1506,7 +1529,7 @@ case $1 in
         echo "s/#$1#\(.*\)/$bs\1#$1#/g" >> $sedout
 	;;
      NVIDIA)
-	echo NOTE: Using PrgEnv-nvidia NV_FORTRAN compiler settings
+	 echo NOTE: Using PrgEnv-nvidia NV_FORTRAN compiler settings
         echo "s/#$1#\(.*\)/$bs\1#$1#/g" >> $sedout
 	;;
      PGI)
@@ -1758,6 +1781,10 @@ case $1 in
         echo "NOTE: Using pthreads as the thread package for TBB support. ***"
         echo "s/#$1#\(.*\)/$bs\1#$1#/g" >> $sedout
         ;;
+     TBB)
+        echo "NOTE: Using an external TBB directory. ***"
+        echo "s/#$1#\(.*\)/$bs\1#$1#/g" >> $sedout
+        ;;
      TAU_PTHREAD_WRAP)
         echo "NOTE: Creating LD_PRELOAD wrapper for pthreads. ***"
         echo "s/#$1#\(.*\)/$bs\1#$1#/g" >> $sedout
@@ -1878,6 +1905,10 @@ case $1 in
 	;;
      DYNINST9)
 	echo "NOTE: Using newer version DYNINST 9+ "
+        echo "s/#$1#\(.*\)/$bs\1#$1#/g" >> $sedout
+	;;
+     DYNINST12)
+	echo "NOTE: Using newer version DYNINST 12+ "
         echo "s/#$1#\(.*\)/$bs\1#$1#/g" >> $sedout
 	;;
      DYNINSTDIR)
