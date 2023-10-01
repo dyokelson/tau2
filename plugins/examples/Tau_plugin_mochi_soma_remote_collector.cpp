@@ -318,7 +318,6 @@ void Tau_plugin_mochi_write_variables() {
 
     /* unlock the counter map */
     RtsLayer::UnLockDB();
-    std::cout << "TRYING TO DO ASYNC COMMIT" << std::endl;
     /* commit the SOMA namespace */
     auto req = soma_collector.soma_commit_namespace_async(ns_handle);
     // Add response to the async queue 
