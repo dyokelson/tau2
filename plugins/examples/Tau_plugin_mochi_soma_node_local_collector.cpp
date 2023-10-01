@@ -18,6 +18,7 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <mutex>
+#include <experimental/optional>
 
 #include <Profile/Profiler.h>
 #include <Profile/TauSampling.h>
@@ -325,7 +326,7 @@ void Tau_plugin_mochi_write_variables() {
     /* commit the SOMA namespace */
     auto req = soma_collector.soma_commit_namespace_async(ns_handle);
     if (req) {
-    	requests.push_back(std::move(req));
+    	requests.push_back(*std::move(req));
     }
 }
 

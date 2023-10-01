@@ -11978,7 +11978,8 @@ if [ $mochi = yes ] ; then
     echo ${mochirpath}
     #mochilibs="${mochilibs}#${mochirpath}"
     fixmakeargs="$fixmakeargs MOCHI "
-    fixmakeargs="$fixmakeargs mochiincludes=${mochiincludes}#-DTAU_MOCHI"
+    fixmakeargs="$fixmakeargs mochiincludes=-DTAU_MOCHI#${mochiincludes}"
+    #fixmakeargs="$fixmakeargs mochiincludes=${mochiincludes}#-DTAU_MOCHI"
     fixmakeargs="$fixmakeargs mochilibs=${mochilibs}"
 fi
 

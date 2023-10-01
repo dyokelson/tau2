@@ -18,6 +18,7 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <mutex>
+#include <experimental/optional>
 
 #include <Profile/Profiler.h>
 #include <Profile/TauSampling.h>
@@ -187,7 +188,7 @@ void Tau_dump_mochi_metadata() {
 void Tau_plugin_mochi_init_mochi(void) {
     my_rank = RtsLayer::myNode();
     size = tau_totalnodes(0,1);
-
+  
     MPI_Barrier(MPI_COMM_WORLD);
 
     /* Grab my server instance address and other deets */
@@ -198,7 +199,6 @@ void Tau_plugin_mochi_init_mochi(void) {
 
     // Initialize a Client
     client = new soma::Client(*engine);
-
     // Create a handle from provider 0
     soma_collector = (*client).makeCollectorHandle(g_address, g_provider_id,
                     soma::UUID::from_string(g_node.c_str()));
@@ -323,7 +323,7 @@ void Tau_plugin_mochi_write_variables() {
     auto req = soma_collector.soma_commit_namespace_async(ns_handle);
     // Add response to the async queue 
     if (req) {
-	requests.push_back(std::move(req));
+	requests.push_back(*std::move(req));
     }
 }
 
