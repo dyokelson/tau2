@@ -3,7 +3,7 @@
 #*                        TAU Portable Profiling Package                           **
 #*                        http://www.cs.uoregon.edu/research/tau                   **
 #****************************************************************************
-#*    Copyright 1997-2019                                                   **
+#*    Copyright 1997-2024                                                  **
 #*    Department of Computer and Information Science, University of Oregon **
 #*    Advanced Computing Laboratory, Los Alamos National Laboratory        **
 #*    Research Center Juelich, ZAM Germany                                 **
@@ -784,6 +784,7 @@ usage() {
     echo "-otf=<dir> ....... Specify location of Open Trace Format (OTF) Package."
     echo "-darshan=<dir> ............... Specify location of Darshan I/O package."
     echo "-python .. Automatically choose python options based on Python in path."
+    echo "-python=<interp> .... Choose Python options based on named interpreter."
     echo "-python3  Automatically choose python options based on Python3 in path."
     echo "-pythoninc=<dir> ........ Specify location of Python include directory."
     echo "-pythonlib=<dir> ............ Specify location of Python lib directory."
@@ -797,6 +798,7 @@ usage() {
     echo "                             (necessary for the instrumentation plugin)"
     echo "-llvm_cxx=<dir.................. Compiler that was used to compile LLVM"
     echo "                             (necessary for the instrumentation plugin)"
+    echo "-syscall ...................................... Build SYSCALL Wrapper."
     echo ""
     echo "-help ...................................... display this help message."
     echo "-fullhelp .............................. display the full help message."
@@ -962,7 +964,8 @@ for arg in "$@"; do
         echo "-upcnetwork=<value> .. Specify network (mpi, udp,...) for Berkeley UPC."
         echo "-gasnet=<dir>  ............ Specify location of GASNET for UPC wrapper."
         echo "-python .. Automatically choose python options based on Python in path."
-	echo "-python3  Automatically choose python options based on Python3 in path."
+        echo "-python=<interp> .... Choose Python options based on named interpreter."
+	    echo "-python3  Automatically choose python options based on Python3 in path."
         echo "-pythoninc=<dir> ........ Specify location of Python include directory."
         echo "-pythonlib=<dir> ............ Specify location of Python lib directory."
         echo "-starpu[=<dir>] ................................ Enable StarPU support."
@@ -1019,6 +1022,7 @@ for arg in "$@"; do
         echo "-ENABLE_EXPORT_DYNAMIC .................... Force -Wl,--export-dynamic."
         echo "-zeptodir=<dir> ............................. ZeptoOS install location."
         echo "                              See http://www-unix.mcs.anl.gov/zeptoos/."
+        echo "-syscall ...................................... Build SYSCALL Wrapper."
         echo "-help ...................................... display this help message."
         echo "-fullhelp .............................. display the full help message."
         exit
@@ -1144,6 +1148,7 @@ python=no
 python3=no
 pythonlibrary=
 pythonintv=python
+python_ver_specified=no
 sicortex=no
 extradir=
 extrashlibopts=
@@ -1381,6 +1386,7 @@ llvm_src_dir=""
 llvm_cxx=""
 starpu=""
 phiprof=""
+syscall=no
 
 restore_perfdmf_and_paraprof
 
@@ -2301,9 +2307,10 @@ for arg in "$@"; do
 
         -dyninst=download)
             dyninst=yes
-        boost=yes
-        download_dyninst=yes
-        echo "Downloading Dyninst..."
+            boost=yes
+            tbb=yes
+            download_dyninst=yes
+            echo "Downloading Dyninst..."
             shift
             ;;
 
@@ -2650,11 +2657,55 @@ for arg in "$@"; do
             shift
             ;;
 
+        -python=*)
+            pythonintv=`echo $arg | sed -e 's/-python=//' -e 's/ /#/g'`
+            python=yes
+            pythonbin=$( which $( echo $pythonintv ) | sed 's,[^/]*$,,' )
+	    python_ver_specified=yes
+            if [ ! -f $pythonbin/$pythonintv ] ; then
+		if [ -f $pythonintv ]; then 
+	           echo "Found $pythonintv"
+	        else
+                  echo "Error: Cannot access Python interpreter $pythonbin/$pythonintv or $pythonintv"
+                  exit 1
+		fi 
+	    else
+	        pythonintv=$pythonbin/$pythonintv
+            fi
+        # Python can/will spawn threads
+            pthread=yes
+            shift
+            ;;
+
         -python)
             pythonbin=`which python | sed 's,[^/]*$,,'`
             python=yes
+            pythonintv=`which python`
         # Python can/will spawn threads
-        pthread=yes
+            pthread=yes
+	    python_ver_specified=no
+            shift
+            ;;
+
+	-python3=*)
+            pythonintv=`echo $arg | sed -e 's/-python3=//' -e 's/ /#/g'`
+	    python=yes
+            python3=yes
+	    python_ver_specified=yes
+            pythonbin=$( which $( echo $pythonintv ) | sed 's,[^/]*$,,' )
+	    if [ ! -f $pythonbin/$pythonintv ] ; then
+                if [ -f $pythonintv ]; then
+                   echo "Found $pythonintv"
+                else
+                  echo "Error: Cannot access Python interpreter $pythonbin/$pythonintv or $pythonintv"
+                  exit 1
+                fi
+            else
+                pythonintv=$pythonbin/$pythonintv
+            fi
+
+        # Python can/will spawn threads
+            pthread=yes
             shift
             ;;
 
@@ -2662,9 +2713,10 @@ for arg in "$@"; do
             pythonbin=`which python3 | sed 's,[^/]*$,,'`
 	    python=yes
             python3=yes
-	    pythonintv=python3
+	    pythonintv=`which python3`
+	    python_ver_specified=no
         # Python can/will spawn threads
-        pthread=yes
+            pthread=yes
             shift
             ;;
 
@@ -2678,7 +2730,7 @@ for arg in "$@"; do
             fi
             python=yes
         # Python can/will spawn threads
-        pthread=yes
+            pthread=yes
             shift
             ;;
 
@@ -2691,7 +2743,7 @@ for arg in "$@"; do
             fi
             python=yes
         # Python can/will spawn threads
-        pthread=yes
+            pthread=yes
             shift
             ;;
 
@@ -3038,7 +3090,6 @@ for arg in "$@"; do
             rocprofiler=yes
             tauoptions="${tauoptions}-rocm"
             pthread=yes
-            fixmakeargs="$fixmakeargs ROCMSMI"
             build_llvm_plugin=yes
             shift
             ;;
@@ -3056,7 +3107,6 @@ for arg in "$@"; do
             rocprofiler=yes
             tauoptions="${tauoptions}-rocm"
             pthread=yes
-            fixmakeargs="$fixmakeargs ROCMSMI"
             build_llvm_plugin=yes
             shift
             ;;
@@ -3074,8 +3124,11 @@ for arg in "$@"; do
               echo  "Error: Cannot access ROCm smi directory $rocmsmidir"
               exit 1
             else
-              fixmakeargs="$fixmakeargs rocmsmidir=$rocmsmidir"
-              rocmsmi=yes
+              if [ -r $rocmsmidir/include/rocm_smi/rocm_smi.h ]; then
+                fixmakeargs="$fixmakeargs rocmsmidir=$rocmsmidir"
+                rocmsmi=yes
+                fixmakeargs="$fixmakeargs ROCMSMI"
+              fi
             fi
             shift
             ;;
@@ -3250,6 +3303,11 @@ for arg in "$@"; do
             shift
             ;;
 
+        -syscall)
+            syscall=yes
+            shift
+            ;;
+
         default)
             echo "Fixing Makefiles"
             ;;
@@ -3277,24 +3335,57 @@ for arg in "$@"; do
     esac
 done
 
+if [ "x$python_ver_specified" = "xno" -a "x$pythoninc" != "x" ]; then 
+  if [ -f $pythoninc/../bin/python ]; then 
+    pythonintv=$pythoninc/../bin/python
+    pythonbin=$pythonbin/../bin
+    python_ver_specified=yes
+  fi 
+fi
+
+if [ "x$python_ver_specified" = "xno" -a "x$pythonlib" != "x" ]; then 
+  if [ -f $pythonlib/../bin/python ]; then 
+    pythonintv=$pythonlib/../bin/python
+    pythonbin=$pythonlib/../bin
+  fi 
+fi
+
 # Check for Python
 if [ "x$python3"  = "xyes" ] ; then
   if [ "x$pythoninc" = "x" ] ; then
-    pythoninc=`echo ${pythonbin}../include/python3* | sed -e 's/ .*//g'`
-    echo "Using Python3 include files from: $pythoninc"
+    # First try to get pythoninc by querying the python interpreter
+    echo "Checking for Python include paths from interpreter ${pythonintv}..."
+    pythoninc=`${pythonintv} ./utils/python_get_paths.py inc | sed -e 's/ .*//g'`
+    if [ "x$pythoninc" = "x" ] ; then
+        echo "Checking for Python include paths relative to ${pythonbin}..."
+        # If that fails, fall back to searching relative to the interpreter
+        pythoninc=`echo ${pythonbin}../include/python3* | sed -e 's/ .*//g'`
+    fi
+    if [ -d $pythoninc ] ; then
+        echo "Using Python3 include files from: $pythoninc"
+    fi
     if [ ! -d $pythoninc ] ; then
         echo "Error: Cannot access Python include directory $pythoninc"
         exit 1
     fi
   fi
   if [ "x$pythonlib" = "x" ] ; then
-    for libdir in "lib64" "lib32" "lib" ; do
-      pythonlib=`echo ${pythonbin}../${libdir}/python3* | sed -e 's/ .*//g'`
-      if [ -d "$pythonlib" ] ; then
+    # First try to get pythonlib by querying the python interpreter
+    echo "Checking for Python library path from interpreter ${pythonintv}..."
+    pythonlib=`${pythonintv} ./utils/python_get_paths.py libdir | sed -e 's/ .*//g'`
+    if [ "x$pythonlib" = "x" ] ; then
+        echo "Checking for Python library path relative to ${pythonbin}..."
+        # If that fails, fall back to searching relative to the interpreter
+        for libdir in "lib64" "lib32" "lib" ; do
+        pythonlib=`echo ${pythonbin}../${libdir}/python3* | sed -e 's/ .*//g'`
+        if [ -d "$pythonlib" ] ; then
+            echo "Using Python3 library files from: $pythonlib"
+            break
+        fi
+        done
+    else
         echo "Using Python3 library files from: $pythonlib"
-        break
-      fi
-    done
+    fi
     if [ ! -d $pythonlib ] ; then
       echo "Error: Cannot access Python lib directory $pythonlib"
       exit 1
@@ -3304,21 +3395,39 @@ else
 
 if [ "x$python"  = "xyes" ] ; then
   if [ "x$pythoninc" = "x" ] ; then
-    pythoninc=`echo ${pythonbin}../include/python* | sed -e 's/ .*//g'`
-    echo " Using Python include files from:$pythoninc"
+    # First try to get pythoninc by querying the python interpreter
+    echo "Checking for Python include paths from interpreter ${pythonintv}..."
+    pythoninc=`${pythonintv} ./utils/python_get_paths.py inc | sed -e 's/ .*//g'`
+    if [ "x$pythoninc" = "x" ] ; then
+        # If that fails, fall back to searching relative to the interpreter
+        echo "Checking for Python include paths relative to ${pythonbin}..."
+        pythoninc=`echo ${pythonbin}../include/python* | sed -e 's/ .*//g'`
+    fi
+    if [ -d $pythoninc ] ; then
+        echo "Using Python include files from: $pythoninc"
+    fi
     if [ ! -d $pythoninc ] ; then
         echo "Error: Cannot access Python include directory $pythoninc"
         exit 1
     fi
   fi
   if [ "x$pythonlib" = "x" ] ; then
-    for libdir in "lib64" "lib32" "lib" ; do
-      pythonlib=`echo ${pythonbin}../${libdir}/python* | sed -e 's/ .*//g'`
-      if [ -d "$pythonlib" ] ; then
-	echo "Using Python library files from: $pythonlib"
-        break
-      fi
-    done
+    echo "Checking for Python library path from interpreter ${pythonintv}..."
+    # First try to get pythonlib by querying the python interpreter
+    pythonlib=`${pythonintv} ./utils/python_get_paths.py libdir | sed -e 's/ .*//g'`
+    if [ "x$pythonlib" = "x" ] ; then
+        # If that fails, fall back to searching relative to the interpreter
+        echo "Checking for Python library path relative to ${pythonbin}..."
+        for libdir in "lib64" "lib32" "lib" ; do
+        pythonlib=`echo ${pythonbin}../${libdir}/python* | sed -e 's/ .*//g'`
+        if [ -d "$pythonlib" ] ; then
+            echo "Using Python library files from: $pythonlib"
+            break
+        fi
+        done
+    else
+        echo "Using Python library files from: $pythonlib"
+    fi
     if [ ! -d $pythonlib ] ; then
       echo "Error: Cannot access Python lib directory $pythonlib"
       exit 1
@@ -3366,8 +3475,11 @@ if [ "x$rocm" = "xyes" -a "x$rocprofiler" = "xyes" -a "x$rocprofilerdir" = "x" -
 fi
 
 if [ "x$rocm" = "xyes" -a "x$rocmsmi" = "xno" ]; then
-  echo "No rocmsmi specified, using $rocmdir"
-  fixmakeargs="$fixmakeargs rocmsmidir=$rocmdir"
+  if [ -r $rocmdir/include/rocm_smi/rocm_smi.h ]; then
+    echo "No rocmsmi specified, using $rocmdir as $rocmdir/include/rocm_smi/rocm_smi.h is found"
+    fixmakeargs="$fixmakeargs rocmsmidir=$rocmdir"
+    fixmakeargs="$fixmakeargs ROCMSMI"
+  fi
 fi
 
 
@@ -4908,6 +5020,14 @@ fi
 
 if [ $debugprof = yes ] ; then
     fixmakeargs="$fixmakeargs DEBUGPROF"
+fi
+
+if [ $syscall = yes ] ; then
+    # if [ $machine = something ] ; then
+    #     echo "WARNING!! Architecture does not support ptrace for syscall"
+    # else
+        fixmakeargs="$fixmakeargs SYSCALL"
+    # fi
 fi
 
 ####################################################################
@@ -10287,11 +10407,11 @@ fi
 ######################################################################
 # Install Dyninst and its dependencies, if requested
 ######################################################################
-libboost=boost_1_67_0
+libboost=boost_1_79_0
 libboosttgz=$libboost.tar.gz
 libboosturl=http://www.cs.uoregon.edu/research/paracomp/tau/tauprofile/dist/$libboosttgz
 
-libdyninst=dyninst-9.3.2-working
+libdyninst=dyninst-12.3.0-working
 libdyninsttgz=$libdyninst.tar.gz
 libdyninsturl=http://www.cs.uoregon.edu/research/paracomp/tau/tauprofile/dist/$libdyninsttgz
 
@@ -10299,9 +10419,13 @@ dynlibiberty=dynlibiberty
 dynlibibertytgz=${dynlibiberty}.tar.gz
 dynlibibertyurl=http://www.cs.uoregon.edu/research/paracomp/tau/tauprofile/dist/$dynlibibertytgz
 
-dynelfutils=elfutils-0.168
+dynelfutils=elfutils-0.189
 dynelfutilsbz=${dynelfutils}.tar.bz2
 dynelfutilsurl=http://www.cs.uoregon.edu/research/paracomp/tau/tauprofile/dist/$dynelfutilsbz
+
+dyntbb=intel-tbb-2020.3
+dyntbbtgz=${dyntbb}.tar.gz
+dyntbburl=http://www.cs.uoregon.edu/research/paracomp/tau/tauprofile/dist/$dyntbbtgz
 
 if [ "x$dyninstdir" = "x" ]; then
   libdyninstdir=${targetdir}/${architecture}
@@ -10318,6 +10442,55 @@ if [ "x$dyninstdir" != "x" -a -d "$dyninstdir" ] ; then
     download_dyninst=yes
   fi
 fi
+
+## Check for tbb
+if [ "x$tbbdir" != "x" -a -d "$tbbdir" ] ; then
+  dyninsttbbdir=${tbbdir}
+else
+  dyninsttbbdir=${libdyninstdir}/${dyntbb}
+  tbbdir=${dyninsttbbdir}
+fi
+if [ "x$dyninsttbbdir" != "x" -a -d "$dyninsttbbdir" ] ; then
+  echo "TBB : found : $dyninsttbbdir"
+  fixmakeargs="$fixmakeargs useropt=-I${dyninsttbbdir}/include "
+else
+  if [ "x$tbb" = xyes ] ; then
+    echo "TBB : not found, downloading..."
+    download_tbb=yes
+  fi
+fi
+
+## Download and install tbb if necessary
+if [ "x$download_tbb" = xyes ] ; then
+  prebfddir=`pwd`
+  # get the tar file
+  if [ ! -f $dyntbbtgz ] ; then
+    download "$dyntbburl" "$dyntbbtgz"
+  fi
+  # check the tar file
+  if [ ! -f $dyntbbtgz ] ; then
+    echo "$dyntbbtgz did not download.  Please download it manually from: "
+    echo "$dyntbburl"
+    echo "Please enter the directory containing the tarball: ${nnl}"
+    read RESPONSE
+    cp $RESPONSE/$dyntbbtgz .
+  else
+    echo "expanding $dyntbbtgz..."
+    rm -rf $dyninsttbbdir
+    mkdir $dyninsttbbdir
+    tar -xzf $dyntbbtgz -C $dyninsttbbdir --strip-components=1
+    echo "removing $dyntbbtgz..."
+    rm $dyntbbtgz
+    cd $dyninsttbbdir
+    # The make command build in ./build/${tbb_build_prefix}_release
+    make tbb_build_prefix=$dyntbb
+    # Rename it for finding it easily
+    mkdir -p lib
+    cp build/${dyntbb}_release/libtbb* lib/
+    fixmakeargs="$fixmakeargs useropt=-I${dyninsttbbdir}/include "
+  fi
+  cd $prebfddir
+fi #end dowload_tbb
 
 ## Check for boost
 if [ "x$boostdir" != "x" -a -d "$boostdir" ] ; then
@@ -10407,40 +10580,65 @@ if [ "x$download_dyninst" = xyes ] ; then
       rm -rf $dyninstdir # remove and make the build dir
       mkdir $dyninstdir
       cd $dyninstdir     # go to the build dir
-      ## Build shared libiberty
-      mkdir ${dyninstdir}/libiberty
-      download "$dynlibibertyurl" "$dynlibibertytgz"
-      tar -xzf $dynlibibertytgz
-      cd $dynlibiberty/libiberty
-      ./configure --enable-shared --prefix=$PWD
-      make
-      ar rcs libiberty.a pic/*.o
-      cp libiberty.a ${dyninstdir}/libiberty
-      cd ../..
-      rm -rf $dynlibiberty $dynlibibertytgz
+      
+      # Get libiberty 
+      mkdir -p ${dyninstdir}/libiberty/lib 
+      libiberty_root_dir=${dyninstdir}/libiberty/ 
+      if [ -r "$bfddir/lib/libiberty.a"  ] ; then
+	      cp "$bfddir/lib/libiberty.a" ${dyninstdir}/libiberty/lib/
+	      libiberty_root_dir=$bfddir # We need the headers of libiberty, see LibIberty.cmake in libdyninst
+      else
+	      ## Build shared libiberty
+	      download "$dynlibibertyurl" "$dynlibibertytgz"
+	      tar -xzf $dynlibibertytgz
+	      cd $dynlibiberty/libiberty
+	      ./configure --enable-shared --prefix=$PWD # It wrongly says that enable-shared is an unknow flag
+	      make -j8
+	      ar rcs libiberty.a pic/*.o
+	      cp libiberty.a ${dyninstdir}/libiberty/lib/
+	      cd ../
+	      cp -r include/ ${dyninstdir}/libiberty/
+	      cd ../
+	      rm -rf $dynlibiberty $dynlibibertytgz
+      fi
+
       ## Build shared elfutils
       mkdir ${dyninstdir}/elfutils
       download "$dynelfutilsurl" "$dynelfutilsbz"
       tar -xf $dynelfutilsbz -C ${dyninstdir}/elfutils --strip-components=1
       cd ${dyninstdir}/elfutils
-      ./configure --enable-shared --prefix=$PWD
-      make
-      make install
+      ./configure -disable-debuginfod --disable-libdebuginfod --prefix=$PWD
+      make -j8
+      make -j8 install
       cd ..
       rm -rf $dynelfutilsbz
+
+      # Here error when using -bfd=download because it searches for /opt/intel/tbb/ by default
+      # Workaround
+      old_CPATH=$CPATH
+      old_CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH
+      export CPATH=${dyninsttbbdir} # To prevent using wrong tbb/include when building
+      export CMAKE_PREFIX_PATH="" # To prevent looking for tbb installation by bfd
       ## Now we can make Dyninst
-      cmake ${prebfddir}/${libdyninst} -DBoost_INCLUDE_DIR=${dyninstboostdir} -DCMAKE_INSTALL_PREFIX=${dyninstdir} -DIBERTY_LIBRARIES=${dyninstdir}/libiberty/libiberty.a -DLIBDWARF_INCLUDE_DIR=${dyninstdir}/elfutils/include -DLIBDWARF_LIBRARIES=${dyninstdir}/elfutils/lib/libdw.so -DLIBELF_INCLUDE_DIR=${dyninstdir}/elfutils/include -DLIBELF_LIBRARIES=${dyninstdir}/elfutils/lib/libelf.so
+      cmake ${prebfddir}/${libdyninst} -DBoost_INCLUDE_DIR=${dyninstboostdir} -DCMAKE_INSTALL_PREFIX=${dyninstdir} -DLibIberty_ROOT_DIR=${libiberty_root_dir} -DIBERTY_LIBRARIES=${dyninstdir}/libiberty/lib/libiberty.a -DElfUtils_ROOT_DIR=${dyninstdir}/elfutils/ -DTBB_ROOT_DIR=${dyninsttbbdir}
       make -j8
       make install
+      export CPATH=$old_CPATH
+      export CMAKE_PREFIX_PATH=$old_CMAKE_PREFIX_PATH
+
+      mkdir -p ${dyninstdir}/lib/
       if [ -f ${dyninstdir}/elfutils/lib/libdw.so ]; then
-          cp ${dyninstdir}/elfutils/lib/libdw* ${dyninstdir}/lib
+          cp ${dyninstdir}/elfutils/lib/libdw* ${dyninstdir}/lib/
           mv ${dyninstdir}/lib/libdw.so ${dyninstdir}/lib/libdwarf.so
       fi
       if [ -f ${dyninstdir}/elfutils/lib/libelf.so ]; then
-          cp ${dyninstdir}/elfutils/lib/libelf* ${dyninstdir}/lib
+          cp ${dyninstdir}/elfutils/lib/libelf* ${dyninstdir}/lib/
       fi
-      if [ -f ${dyninstdir}/libiberty/libiberty.a ]; then
-          cp ${dyninstdir}/libiberty/libiberty.a ${dyninstdir}/lib
+      if [ -f ${dyninstdir}/libiberty/lib/libiberty.a ]; then
+          cp ${dyninstdir}/libiberty/lib/libiberty.a ${dyninstdir}/lib/
+      fi
+      if [ -f ${dyninsttbbdir}/lib/libtbb.so ]; then
+          cp ${dyninsttbbdir}/lib/libtbb* ${dyninstdir}/lib/
       fi
     fi
   fi
@@ -10788,6 +10986,10 @@ if [ $sproc = yes ] ; then
 fi
 
 if [ $python = yes ] ; then
+    if [ "x$pythonlibrary" = "x" ] ; then
+        echo "Checking for Python library name from interpreter ${pythonintv}... "
+        pythonlibrary=`${pythonintv} ./utils/python_get_paths.py libname | sed -e 's/ .*//g'`
+    fi
     if [ "x$pythonlibrary" != "x" ] ; then
         if [ ! -f $pythonlib/$pythonlibrary ] ; then
                 echo "ERROR: Python library $pythonlib/$pythonlibrary not found."
@@ -13198,6 +13400,11 @@ fi
 # bye bye
 echo
 echo "Configuration complete!"
+if [ $dyninst = yes ]; then
+       echo "TAU: Please use the following to use DyninstAPI: "
+       echo "export LD_LIBRARY_PATH=${dyninstdir}/lib:$targetdir/$architecture/lib:\$LD_LIBRARY_PATH"
+       echo "export DYNINSTAPI_RT_LIB=${dyninstdir}/lib/libdyninstAPI_RT.so"
+fi
 if [ $tauprefix != unknown ] ; then
     echo "   Please add " $tauprefix/$architecture/bin " to your path"
 else
@@ -13227,4 +13434,3 @@ then
    echo  "****************************************************************************************************"
 fi
 
-exit 0
