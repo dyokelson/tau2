@@ -381,7 +381,7 @@ int Tau_plugin_mochi_pre_end_of_execution(Tau_plugin_event_pre_end_of_execution_
     if (my_rank == 0) {
         std::string outfile = "tau_data_soma.txt";
         bool write_done;
-        soma_collector.soma_write(outfile, &write_done);
+        soma_collector.soma_write(outfile, &write_done, soma::APPEND);
     }
 #endif
     return 0;
