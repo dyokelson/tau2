@@ -1368,6 +1368,7 @@ zeptodir=
 cuda=no
 level_zero=no
 rocm=no
+rocmv6=no
 rocprofiler=no
 rocprofv2=no
 roctracer=no
@@ -1387,7 +1388,7 @@ llvm_cxx=""
 starpu=""
 phiprof=""
 syscall=no
-
+compiler_for_dyninst=""
 restore_perfdmf_and_paraprof
 
 
@@ -3111,14 +3112,14 @@ for arg in "$@"; do
             shift
             ;;
 
-	-rocprofv2)
+	   -rocprofv2)
             fixmakeargs="$fixmakeargs ROCPROFILERV2"
             rocprofv2=yes
             tauoptions="${tauoptions}-rocprofv2"
             pthread=yes
             shift
             ;;
-	-rocmsmi=*)
+	   -rocmsmi=*)
             rocmsmidir=`echo $arg | sed -e 's/-rocmsmi=//' -e 's/ /#/g'`
             if [ ! -d $rocmsmidir ]; then
               echo  "Error: Cannot access ROCm smi directory $rocmsmidir"
@@ -3168,13 +3169,9 @@ for arg in "$@"; do
               if [ -r $roctracerdir/inc/roctracer_hsa.h -o -r $roctracerdir/include/roctracer/roctracer_hsa.h ]; then
                   fixmakeargs="$fixmakeargs ROCTRACER_HSA"
               fi
-
-
-
             fi
             shift
             ;;
-
         -rocprofiler=*)
             rocprofilerdir=`echo $arg | sed -e 's/-rocprofiler=//' -e 's/ /#/g'`
             if [ ! -d $rocprofilerdir ]; then
@@ -3437,51 +3434,122 @@ fi
 
 fi
 
-if [ "x$rocm" = "xyes" -a "x$rocprofv2" = "xyes" ]; then
+#Check for rocm version, rocm-6 has files includes and library files in
+#a different location compared to older versions, include/rocm-core
+#should only exist in rocm-6
+if [ "x$rocm" = "xyes" ]; then
 
-    cat <<EOF > tau_rocprofv2_vtest.c
-#include <include/rocm_version.h>
+cat <<EOF > tau_rocm6_vtest.c
+#include <rocm_version.h>
 
-#if ((ROCM_VERSION_MAJOR != 5) || (ROCM_VERSION_MINOR != 6))
-#error "ROCM version is not 5.6"
+#if (ROCM_VERSION_MAJOR < 6)
+#error "ROCM version is lower than 6"
 #endif
 EOF
+	if [ -d $rocmdir/include/rocm-core ]; then
+		#echo "exists"
+		#echo "$cxx_compiler, $orig_useropt , $rocmdir"
+		if $cxx_compiler $orig_useropt -c tau_rocm6_vtest.c -I$rocmdir/include/rocm-core 1> /dev/null 2>&1
+		then
+			#echo "compiled"
+			rm tau_rocm6_vtest.o
+			rocmv6=yes
+            fixmakeargs="$fixmakeargs TAU_USE_GPU"
+            pthread=yes
+            tauoptions="${tauoptions}-rocmv6"
+		else
+			#echo "failed compile"
+			rocmv6=no
+		fi
+		#echo "removing test"
+		rm tau_rocm6_vtest.c
+	else
+		#echo "does not exist"
+		rocmv6=no
+	fi
+fi
 
-    if $cxx_compiler $orig_useropt -c tau_rocprofv2_vtest.c -I$rocmdir 1> /dev/null 2>&1
-    then
-	echo " Building rocprofv2" >/dev/null
-	rm tau_rocprofv2_vtest.c tau_rocprofv2_vtest.o
-    else
-       echo "For rocprofv2 use rocm/5.6.0"
-       rm tau_rocprofv2_vtest.c
-       exit
-    fi
 
-    fixmakeargs="$fixmakeargs TAU_USE_GPU"
+
+if [ "x$rocm" = "xyes" -a "$rocprofv2" = "yes" -a "rocmv6" = "no" ]; then
+    echo "For rocprofv2 use rocm/6 or newer!"
+    exit
+fi
+
+if [ "x$rocm" = "xyes" -a "$rocprofv2" = "yes" -a "rocmv6" = "yes" ]; then
     pthread=yes
-    rocprofiler=no    
+    if [ "x$rocprofilerdir" = "x" ]; then
+        rocprofilerdir=$rocmdir
+    fi
+
     if [ "x$rocprofilerinc" = "x" ]; then
-     rocprofilerinc="$rocmdir/include/rocprofiler"
-     fixmakeargs="$fixmakeargs rocprofilerinc=$rocprofilerinc"
+        rocprofilerinc="$rocprofilerdir/include/rocprofiler"
+        fixmakeargs="$fixmakeargs rocprofilerinc=$rocprofilerinc"
     fi
 fi
 
-if [ "x$rocm" = "xyes" -a "x$rocprofiler" = "xyes" -a "x$rocprofilerdir" = "x" -a -d $rocmdir/rocprofiler -a "x$roctracerdir" = "x" ]; then
-  rocprofilerdir=$rocmdir/rocprofiler
-  fixmakeargs="$fixmakeargs rocprofilerdir=$rocprofilerdir ROCPROFILER TAU_USE_GPU"
-  rocprofiler=yes
-  tauoptions="${tauoptions}-rocprofiler"
-  pthread=yes
+if [ "$rocmv6" = "yes" -a "$rocprofv2" = "no" ] ; then
+    if [ "$roctracer" = yes ]; then
+        fixmakeargs="$fixmakeargs ROCTRACERROCM6"
+        if [ -r $roctracerdir/include/roctracer/roctracer_hsa.h ]; then
+            fixmakeargs="$fixmakeargs ROCTRACERROCM6_HSA"
+        fi
+
+    fi
+
+    if [ "x$rocprofilerdir" = "x" ]; then
+        rocprofilerdir=$rocmdir
+    fi
+
+    if [ "$rocprofiler" = yes ]; then
+        fixmakeargs="$fixmakeargs ROCPROFILERROCM6"
+    fi
+
+    if [ "x$rocprofilerlibrary" = "x" ]; then
+        rocprofilerlibrary=librocprofiler64.so
+        fixmakeargs="$fixmakeargs rocprofilerlibrary=$rocprofilerlibrary"
+    fi
+
+    if [ "x$rocprofilerinc" = "x" ]; then
+        rocprofilerinc="$rocprofilerdir/include/rocprofiler"
+        fixmakeargs="$fixmakeargs rocprofilerinc=$rocprofilerinc"
+    fi
 fi
 
-if [ "x$rocm" = "xyes" -a "x$rocmsmi" = "xno" ]; then
-  if [ -r $rocmdir/include/rocm_smi/rocm_smi.h ]; then
-    echo "No rocmsmi specified, using $rocmdir as $rocmdir/include/rocm_smi/rocm_smi.h is found"
-    fixmakeargs="$fixmakeargs rocmsmidir=$rocmdir"
-    fixmakeargs="$fixmakeargs ROCMSMI"
-  fi
+if [ "rocmv6" = "no" ] ; then
+    if [ "x$rocm" = "xyes" -a "x$rocprofiler" = "xyes" -a "x$rocprofilerdir" = "x" -a -d $rocmdir/rocprofiler -a "x$roctracerdir" = "x" ]; then
+      rocprofilerdir=$rocmdir/rocprofiler
+      fixmakeargs="$fixmakeargs rocprofilerdir=$rocprofilerdir ROCPROFILER TAU_USE_GPU"
+      rocprofiler=yes
+      tauoptions="${tauoptions}-rocprofiler"
+      pthread=yes
+    fi
+    if [ "x$rocm" = "xyes" -a "x$rocmsmi" = "xno" ]; then
+      if [ -r $rocmdir/include/rocm_smi/rocm_smi.h ]; then
+        echo "No rocmsmi specified, using $rocmdir as $rocmdir/include/rocm_smi/rocm_smi.h is found"
+        fixmakeargs="$fixmakeargs rocmsmidir=$rocmdir"
+        fixmakeargs="$fixmakeargs ROCMSMI"
+      fi
+    fi
+    # AMD ROCm rocprofiler directories
+    if [ "$rocprofiler" = yes -a "$rocm" = "no" ]; then
+       if [ "x$rocmdir" = "x" -a -d /opt/rocm ]; then
+         rocmdir=/opt/rocm
+         fixmakeargs="$fixmakeargs rocmdir=$rocmdir ROCM"
+       fi
+    fi
+    if [ "$rocprofiler" = yes -a "x$rocprofilerinc" = "x" ]; then
+       if [ "x$rocprofilerlibrary" = "x" ];
+       then
+         rocprofilerlibrary=librocprofiler64.so
+         fixmakeargs="$fixmakeargs rocprofilerlibrary=$rocprofilerlibrary"
+       fi
+       if [ "x$rocprofilerinc" = "x" ]; then
+         rocprofilerinc="$rocprofilerdir/inc"
+         fixmakeargs="$fixmakeargs rocprofilerinc=$rocprofilerinc"
+       fi
+    fi
 fi
-
 
 if [ "x$use_opencl" = "xyes" -a "x$openclinclude" = "x" ]; then
   ld_lib_path=`echo $LD_LIBRARY_PATH | sed -e "s@:@ @g" `
@@ -3523,26 +3591,6 @@ else
         #echo "NOTE: Assuming -mpi because -upcnetwork=mpi."
         mpi=yes
     fi
-fi
-
-# AMD ROCm rocprofiler directories
-if [ "$rocprofiler" = yes -a "$rocm" = "no" ]; then
-   if [ "x$rocmdir" = "x" -a -d /opt/rocm ]; then
-     rocmdir=/opt/rocm
-     fixmakeargs="$fixmakeargs rocmdir=$rocmdir ROCM"
-   fi
-fi
-
-if [ "$rocprofiler" = yes -a "x$rocprofilerinc" = "x" ]; then
-   if [ "x$rocprofilerlibrary" = "x" ];
-   then
-     rocprofilerlibrary=librocprofiler64.so
-     fixmakeargs="$fixmakeargs rocprofilerlibrary=$rocprofilerlibrary"
-   fi
-   if [ "x$rocprofilerinc" = "x" ]; then
-     rocprofilerinc="$rocprofilerdir/inc"
-     fixmakeargs="$fixmakeargs rocprofilerinc=$rocprofilerinc"
-   fi
 fi
 
 # -- some functions
@@ -3773,8 +3821,8 @@ configure_perfexplorer () {
             gunzip -c tools/src/contrib/jogl/apple/libjogl.jnilib.gz > $JARTARGET/libjogl.jnilib
             gunzip -c tools/src/contrib/jogl/apple/libjogl_awt.jnilib.gz > $JARTARGET/libjogl_awt.jnilib
             gunzip -c tools/src/contrib/jogl/apple/libjogl_cg.jnilib.gz > $JARTARGET/libjogl_cg.jnilib
-            cp tools/src/contrib/jogl/apple/gluegen-rt-natives*.jar $JARTARGET/gluegen-rt-natives.jar
-            cp tools/src/contrib/jogl/apple/jogl-all-natives*.jar $JARTARGET/jogl-all-natives.jar
+            cp tools/src/contrib/jogl/apple/gluegen-rt-natives*.jar $JARTARGET #/gluegen-rt-natives.jar
+            cp tools/src/contrib/jogl/apple/jogl-all-natives*.jar $JARTARGET #/jogl-all-natives.jar
 
             ;;
 
@@ -3788,8 +3836,8 @@ configure_perfexplorer () {
             gunzip -c tools/src/contrib/jogl/i386_linux/libjogl_awt.so.gz > $JARTARGET/libjogl_awt.so
             gunzip -c tools/src/contrib/jogl/i386_linux/libjogl_cg.so.gz > $JARTARGET/libjogl_cg.so
             gunzip -c tools/src/contrib/jogl/i386_linux/libjogl_drihack.so.gz > $JARTARGET/libjogl_drihack.so
-            cp tools/src/contrib/jogl/i386_linux/gluegen-rt-natives*.jar $JARTARGET/gluegen-rt-natives.jar
-            cp tools/src/contrib/jogl/i386_linux/jogl-all-natives*.jar $JARTARGET/jogl-all-natives.jar
+            cp tools/src/contrib/jogl/i386_linux/gluegen-rt-natives*.jar $JARTARGET #/gluegen-rt-natives.jar
+            cp tools/src/contrib/jogl/i386_linux/jogl-all-natives*.jar $JARTARGET #/jogl-all-natives.jar
 
             ;;
 
@@ -3799,8 +3847,8 @@ configure_perfexplorer () {
             gunzip -c tools/src/contrib/jogl/arm64_linux/libnativewindow_awt.so.gz > $JARTARGET/libnativewindow_awt.so
             gunzip -c tools/src/contrib/jogl/arm64_linux/libnativewindow_x11.so.gz > $JARTARGET/libnativewindow_x11.so
 
-            cp tools/src/contrib/jogl/arm64_linux/gluegen-rt.jar $JARTARGET/gluegen-rt-natives.jar
-            cp tools/src/contrib/jogl/arm64_linux/jogl-all.jar $JARTARGET/jogl-all-natives.jar
+            cp tools/src/contrib/jogl/arm64_linux/gluegen-rt.jar $JARTARGET #/gluegen-rt-natives.jar
+            cp tools/src/contrib/jogl/arm64_linux/jogl-all.jar $JARTARGET #/jogl-all-natives.jar
             ;;
 
         arm_linux)
@@ -3809,8 +3857,8 @@ configure_perfexplorer () {
             gunzip -c tools/src/contrib/jogl/arm_linux/libjogl.so.gz > $JARTARGET/libjogl.so
             gunzip -c tools/src/contrib/jogl/arm_linux/libjogl_awt.so.gz > $JARTARGET/libjogl_awt.so
 
-            cp tools/src/contrib/jogl/arm_linux/gluegen-rt-natives*.jar $JARTARGET/gluegen-rt-natives.jar
-            cp tools/src/contrib/jogl/arm_linux/jogl-all-natives*.jar $JARTARGET/jogl-all-natives.jar
+            cp tools/src/contrib/jogl/arm_linux/gluegen-rt-natives*.jar $JARTARGET #/gluegen-rt-natives.jar
+            cp tools/src/contrib/jogl/arm_linux/jogl-all-natives*.jar $JARTARGET #/jogl-all-natives.jar
 
             if [ -r tools/src/contrib/jogl/arm_linux/libjogl_drihack.so.gz ] ; then
               gunzip -c tools/src/contrib/jogl/arm_linux/libjogl_drihack.so.gz > $JARTARGET/libjogl_drihack.so
@@ -4220,7 +4268,32 @@ case $machine in
              cxx_compiler=mpiFCC
              c_compiler=mpifcc
              fortran_compiler=mpifrt
+          else
+	    found_compiler=`which mpicxx 2>/dev/null`
+	    if [ "x$found_compiler" != "x" -a -x "$found_compiler" ]; then
+               echo "TAU: Using mpicxx, mpicc, and mpif90 as C++, C, and Fortran compilers respectively."
+               cxx_compiler=mpicxx
+               c_compiler=mpicc
+	       found_compiler=`which gfortran 2>/dev/null`
+               if [ "x$found_compiler" != "x" -a -x "$found_compiler" ]; then
+	          taugcclibdir=`g++ $tau_opt_bits -print-libgcc-file-name | sed -e 's,[^/]*$,,'`
+	          fixmakeargs="$fixmakeargs taugcclibdir=$taugcclibdir"
+		  fortran_compiler=gfortran
+	       fi
+            fi
           fi
+	else
+            if [ "x$cxx_compiler" = "xdefault" ]; then
+	      found_compiler=`which g++ 2>/dev/null`
+              if [ "x$found_compiler" != "x" -a -x "$found_compiler" ]; then
+                echo "TAU: Using g++, gcc, and gfortran as C++, C, and Fortran compilers respectively."
+                cxx_compiler=g++
+                c_compiler=gcc
+                fortran_compiler=gfortran
+	        taugcclibdir=`g++ $tau_opt_bits -print-libgcc-file-name | sed -e 's,[^/]*$,,'`
+	        fixmakeargs="$fixmakeargs taugcclibdir=$taugcclibdir"
+              fi
+            fi
         fi
         ;;
 
@@ -4614,6 +4687,10 @@ esac
 
 if [ "x$fortran_compiler" = "xarmflang" ]; then
    fixmakeargs="$fixmakeargs ARMFLANG"
+fi
+
+if [ "x$fortran_compiler" = "xnvfortran" ]; then
+   fixmakeargs="$fixmakeargs NVFORTRAN"
 fi
 
 if [ "x$fortran_compiler" = "xxlflang" ]; then
@@ -5831,6 +5908,10 @@ case $cxx_compiler in
 	internal_c_compiler=`$c_compiler -show | awk '{ print $1;}'`
         echo "Detected MPI C++ internal compiler = $internal_compiler MPI C internal compiler = $internal_c_compiler"
         case $internal_compiler in
+            *icpc | *icpx )
+                fixmakeargs="$fixmakeargs USE_INTELCXX"
+                intel=yes
+                ;;
             *clang* | hcc | hipcc )
                 tauoptions="${tauoptions}-clang"
                 llvm=yes
@@ -9791,14 +9872,6 @@ binutils=binutils-2.40
 binutilstgz=$binutils.tar.gz
 binutilsurl=http://www.cs.uoregon.edu/research/paracomp/tau/tauprofile/dist/$binutilstgz
 
-if [ $machine = arm64_linux -a ! -r $targetdir/$architecture/$binutils/include/bfd.h ] ; then
-  binutilsurl=http://www.cs.uoregon.edu/research/paracomp/tau/tauprofile/dist/arm64-bfd.tgz
-  binutilstgz=arm64-bfd.tgz
-  p=`pwd`
-  cd $targetdir/$architecture/; download "$binutilsurl" "$binutilstgz" ; tar zxf $binutilstgz; rm -f $binutilstgz ; cd ${p};
-  binutils=binutils-2.23.2
-fi
-
 if [ $machine = nec-sx-aurora ]; then
   binutils=binutils-2.23.2
   binutilstgz=$binutils.tar.gz
@@ -10452,7 +10525,12 @@ else
 fi
 if [ "x$dyninsttbbdir" != "x" -a -d "$dyninsttbbdir" ] ; then
   echo "TBB : found : $dyninsttbbdir"
-  fixmakeargs="$fixmakeargs useropt=-I${dyninsttbbdir}/include "
+  curr_path=`pwd`
+  cd $dyninsttbbdir
+  compiler_for_dyninst=`make info | awk -F= 'NR==3 {printf $2}'`
+  cd $curr_path
+  unset curr_path
+  fixmakeargs="$fixmakeargs useropt=-I${dyninsttbbdir}/include#${useropt} "
 else
   if [ "x$tbb" = xyes ] ; then
     echo "TBB : not found, downloading..."
@@ -10487,7 +10565,8 @@ if [ "x$download_tbb" = xyes ] ; then
     # Rename it for finding it easily
     mkdir -p lib
     cp build/${dyntbb}_release/libtbb* lib/
-    fixmakeargs="$fixmakeargs useropt=-I${dyninsttbbdir}/include "
+    fixmakeargs="$fixmakeargs useropt=-I${dyninsttbbdir}/include#${useropt} "
+    compiler_for_dyninst=`make info | awk -F= 'NR==3 {printf $2}'`
   fi
   cd $prebfddir
 fi #end dowload_tbb
@@ -10620,7 +10699,7 @@ if [ "x$download_dyninst" = xyes ] ; then
       export CPATH=${dyninsttbbdir} # To prevent using wrong tbb/include when building
       export CMAKE_PREFIX_PATH="" # To prevent looking for tbb installation by bfd
       ## Now we can make Dyninst
-      cmake ${prebfddir}/${libdyninst} -DBoost_INCLUDE_DIR=${dyninstboostdir} -DCMAKE_INSTALL_PREFIX=${dyninstdir} -DLibIberty_ROOT_DIR=${libiberty_root_dir} -DIBERTY_LIBRARIES=${dyninstdir}/libiberty/lib/libiberty.a -DElfUtils_ROOT_DIR=${dyninstdir}/elfutils/ -DTBB_ROOT_DIR=${dyninsttbbdir}
+      CC=$compiler_for_dyninst cmake ${prebfddir}/${libdyninst} -DBoost_INCLUDE_DIR=${dyninstboostdir} -DCMAKE_INSTALL_PREFIX=${dyninstdir} -DLibIberty_ROOT_DIR=${libiberty_root_dir} -DIBERTY_LIBRARIES=${dyninstdir}/libiberty/lib/libiberty.a -DElfUtils_ROOT_DIR=${dyninstdir}/elfutils/ -DTBB_ROOT_DIR=${dyninsttbbdir}
       make -j8
       make install
       export CPATH=$old_CPATH
@@ -11880,8 +11959,8 @@ fi
 # Install libotf2 if requested
 ######################################################################
 libotf2=otf2
-libotf2_dirname=otf2-2.1
-libotf2tgz=$libotf2.tgz
+libotf2_dirname=otf2-3.0.3
+libotf2tgz=otf2-3.0.3.tgz
 libotf2url=http://www.cs.uoregon.edu/research/tau/$libotf2tgz
 
 if [ "x$otfdir" = "x" ]; then
@@ -12084,14 +12163,6 @@ fi
 
 if [ -d $otfdir/include/otf2 ]; then
     fixmakeargs="$fixmakeargs OTF2 otfdir=$otfdir"
-    otfversion_11=`$otfdir/bin/otf2-config --version | grep "^1.1" | wc -l `
-    if [ $otfversion_11 = 1 ]; then
-      fixmakeargs="$fixmakeargs OTF2_1_1"
-    fi
-    otfversion_12=`$otfdir/bin/otf2-config --version | grep "^1.2" | wc -l `
-    if [ $otfversion_12 = 1 ]; then
-      fixmakeargs="$fixmakeargs OTF2_1_2"
-    fi
 else
     if [ $otf = yes ] ; then
 	if [ -r $otfinc/otf.h ]; then

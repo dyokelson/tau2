@@ -110,8 +110,6 @@ INSTALLTRACE2PROFILE	= $(INSTALLDEST)/trace2profile
 #VTF#TAU2VTF 	= tau2vtf #ENDIF#
 #OTF#TAU2OTF 	= tau2otf #ENDIF#
 #OTF2#TAU2OTF 	= tau2otf2 #ENDIF#
-#OTF2_1_1#TAU_OTF2_1_1_FLAGS 	= -DTAU_OTF2_1_1 #ENDIF#
-#OTF2_1_2#TAU_OTF2_1_2_FLAGS 	= -DTAU_OTF2_1_2 #ENDIF#
 #VTF#VTF2PROFILE 	= vtfconverter/vtf2profile #ENDIF#
 #VTF#INSTALLTAU2VTF 	= $(INSTALLDEST)/tau2vtf #ENDIF#
 #VTF#INSTALLVTF2PROFILE 	= $(INSTALLDEST)/vtf2profile #ENDIF#
@@ -142,7 +140,7 @@ INSTALLTRACE2PROFILE	= $(INSTALLDEST)/trace2profile
 # -lelf is for Solaris only
 #DYNINST8#DYNLIBS 	= -L$(DYNINST_LIB_DIR) -ldyninstAPI -lelf -lcommon -lparseAPI -lsymtabAPI $(DWARFOPTS) -ldwarf -liberty -linstructionAPI -lstackwalk -lpcontrol -ldynElf -lpatchAPI -lsymLite -ldynDwarf #ENDIF#
 #DYNINST9#DYNLIBS 	= -L$(DYNINST_LIB_DIR) -ldyninstAPI -lelf -lcommon -lparseAPI -lsymtabAPI $(DWARFOPTS) -ldwarf -liberty -linstructionAPI -lstackwalk -lpcontrol -ldynElf -lpatchAPI -ldynDwarf #ENDIF#
-#DYNINST12#DYNLIBS 	= -L$(DYNINST_LIB_DIR) -L$(ELFDIR)/lib -ldyninstAPI -lelf -lcommon -lparseAPI -lsymtabAPI $(DWARFOPTS) -ldwarf -liberty -linstructionAPI -lstackwalk -lpcontrol -ldynElf -lpatchAPI -ldynDwarf #ENDIF#
+#DYNINST12#DYNLIBS 	= -L$(DYNINST_LIB_DIR) -Wl,-rpath,$(DYNINST_LIB_DIR) -L$(ELFDIR)/lib -ldyninstAPI -lelf -lcommon -lparseAPI -lsymtabAPI $(DWARFOPTS) -liberty -linstructionAPI -lstackwalk -lpcontrol -ldynElf -lpatchAPI -ldynDwarf #ENDIF#
 
 #SOL2CC#CEXTRA=-DTAU_DOT_H_LESS_HEADERS -DSOL2CC #ENDIF#
 #SUNCC#CEXTRA=-DTAU_DOT_H_LESS_HEADERS #ENDIF#
